@@ -1,0 +1,40 @@
+/*
+# Transforming data into actionable intelligence
+The parser script is written in the CrowdStrike Query Language. If you want to customize this parser for your own logs, we recommend starting by gathering some sample events, like the ones attached to this parser. When you click "Run tests", these test logs are run through the parser, and you can click each test to see what the parser produced, as well as configure assertions on them. To extract data from your own events, you can use built-in functions like parseJson(), kvParse(), or similar. If your events have a more custom format, write regular expressions to extract fields.
+The example script below combines both approaches.
+
+## Normalizing data
+Build a parser to normalize data from diverse data sources, so you can easily search across various incoming formats.
+Note that NG-SIEM detections expect fields that are normalized to CrowdStrike Parsing Standard: https://library.humio.com/integrations-base/pasta
+*/
+
+// ## Parser example
+// Given an event like
+//    2018-10-15T12:53:12+01:00 [INFO] User logged in. user_id=1831923 protocol=http
+
+// extract the following fields:
+//   - temp_timestamp = 2018-10-15T12:53:12+01:00
+//   - logLevel = INFO
+//   - message = User logged in
+//   - temp_kvPairs = user_id=1831923 protocol=http
+/^(?<temp_timestamp>S+) [(?<logLevel>w+)] (?<message>.*?). (?<temp_kvPairs>.*)/
+
+// Assign the timestamp to the '@timestamp' field.
+// The contents of '@timestamp' must be a UNIX timestamp, which parseTimestamp produces for us.
+| @timestamp := parseTimestamp("yyyy-MM-dd'T'HH:mm:ss[.SSS]XXX", field=temp_timestamp)
+
+// As we have assigned the timestamp to the '@timestamp' field in the format LogScale expects,
+// we can drop the 'temp_timestamp' field, so it doesn't end up being stored.
+| drop(temp_timestamp)
+
+// We previously extracted all the key-value pairs into a single field called 'temp_kvPairs'.
+// Now we can pass that field to the kvParse function, to let it extract each pair into separate fields.
+// That is, if 'temp_kvPairs' has the value "user_id=1831923 protocol=http",
+// then kvParse produces the following fields:
+//   - user_id = 1831923
+//   - protocol = http
+| kvParse(temp_kvPairs)
+
+// Now that each key-value pair has been extracted into standalone fields,
+// we can drop the temporary field we created for them previously.
+| drop(temp_kvPairs)
